@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HMI SCADA - Exact Journal Model</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Rajdhani:wght@500;700&display=swap');
+
+        :root {
+            --bg-main: #0f172a;
+            --bg-panel: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-cyan: #06b6d4;
+            --accent-blue: #3b82f6;
+            --accent-red: #ef4444;
+            --accent-green: #10b981;
+            --accent-yellow: #f1c40f;
+            --border-color: #334155;
+        }
+
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg-main); color: var(--text-main); margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .dashboard-container { width: 100%; max-width: 1400px; display: grid; grid-template-columns: 1fr 350px; grid-template-rows: auto 1fr; gap: 20px; }
+        
+        header { grid-column: 1 / -1; background: var(--bg-panel); padding: 15px 30px; border-radius: 12px; border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        header h1 { margin: 0; font-size: 24px; font-weight: 800; color: var(--accent-cyan); text-shadow: 0 0 10px rgba(6, 182, 212, 0.3); }
+        
+        .panel { background: var(--bg-panel); border-radius: 12px; border: 1px solid var(--border-color); padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+
+        /* AREA DIAGRAM */
+        .diagram-panel { position: relative; min-height: 450px; display: flex; justify-content: center; align-items: center; background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%); overflow: hidden; }
+        .diagram-panel::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 20px 20px; z-index: 0; }
+        
+        .hmi-tag { position: absolute; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--accent-cyan); padding: 4px 8px; border-radius: 4px; font-family: 'Rajdhani', monospace; font-size: 14px; color: var(--accent-cyan); z-index: 40; }
+        
+        .pipe { position: absolute; z-index: 10; background: linear-gradient(to bottom, #475569 0%, #94a3b8 20%, #334155 80%, #1e293b 100%); box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        .pipe-in-h { top: 100px; left: 100px; width: 200px; height: 24px; border-radius: 4px 0 0 4px; }
+        .pipe-in-v { top: 100px; left: 280px; width: 24px; height: 60px; border-radius: 0 4px 0 0; background: linear-gradient(to right, #475569 0%, #94a3b8 20%, #334155 80%, #1e293b 100%); }
+        .pipe-out { top: 350px; left: 520px; width: 150px; height: 24px; border-radius: 0 4px 4px 0; }
+
+        .tank { position: absolute; top: 160px; left: 250px; width: 280px; height: 220px; background: linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 50%, rgba(255,255,255,0.08) 100%); border: 2px solid rgba(255,255,255,0.15); border-top: none; border-radius: 0 0 20px 20px; z-index: 20; box-shadow: inset 0 -20px 40px rgba(0,0,0,0.5); backdrop-filter: blur(2px); overflow: hidden; }
+        
+        .water { position: absolute; bottom: 0; left: 0; width: 100%; height: 0%; background: linear-gradient(180deg, rgba(6, 182, 212, 0.8) 0%, rgba(59, 130, 246, 0.9) 100%); transition: height 0.05s linear; box-shadow: 0 0 30px rgba(6, 182, 212, 0.3); }
+        .water::before { content: ''; position: absolute; top: -10px; left: 0; width: 200%; height: 20px; background: url('data:image/svg+xml;utf8,<svg viewBox="0 0 100 20" xmlns="http://www.w3.org/2000/svg"><path d="M0 10 Q 25 20, 50 10 T 100 10 L 100 20 L 0 20 Z" fill="rgba(6, 182, 212, 0.9)"/></svg>') repeat-x; background-size: 50px 20px; animation: wave 2s linear infinite; }
+        @keyframes wave { 0% { transform: translateX(0); } 100% { transform: translateX(-50px); } }
+
+        .stream { position: absolute; opacity: 0; z-index: 18; }
+        .stream-in { top: 150px; left: 284px; width: 16px; background: linear-gradient(to bottom, rgba(136, 225, 242, 0.8), rgba(6, 182, 212, 0.4)); animation: flowDown 0.2s linear infinite; background-size: 100% 20px; }
+        .stream-out { top: 355px; left: 660px; height: 14px; width: 0px; background: linear-gradient(to right, rgba(136, 225, 242, 0.8), rgba(6, 182, 212, 0)); animation: flowRight 0.2s linear infinite; }
+        @keyframes flowDown { 0% { background-position: 0 -20px; } 100% { background-position: 0 0; } }
+        @keyframes flowRight { 0% { background-position: -20px 0; } 100% { background-position: 0 0; } }
+
+        /* AREA KONTROL */
+        .control-panel { display: flex; flex-direction: column; gap: 20px; }
+        .metric-card { background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color); padding: 15px; border-radius: 8px; display: flex; flex-direction: column; border-left: 4px solid var(--accent-cyan); margin-bottom: 10px; }
+        .metric-title { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+        .metric-value { font-family: 'Rajdhani', sans-serif; font-size: 32px; font-weight: 700; color: #fff; margin-top: 5px; }
+
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
+        .form-group input { width: 100%; box-sizing: border-box; background: #0f172a; border: 1px solid var(--border-color); color: var(--accent-yellow); padding: 10px; border-radius: 6px; font-family: 'Rajdhani', monospace; font-size: 16px; font-weight: 700; outline: none; }
+
+        .btn-group { display: flex; gap: 10px; margin-top: 15px; }
+        button { flex: 1; padding: 15px; border: none; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; text-transform: uppercase; color: white; transition: 0.3s; }
+        .btn-play { background: var(--accent-blue); } .btn-play.running { background: var(--accent-red); }
+        .btn-reset { background: transparent; border: 1px solid var(--border-color); color: var(--text-muted); }
+
+        /* AREA GRAFIK (MATLAB SCOPE STYLE) */
+        .chart-panel { grid-column: 1 / -1; height: 350px; position: relative; background: #000; border: 2px solid #334155; border-radius: 8px; padding: 15px; box-shadow: inset 0 0 20px rgba(255,255,255,0.1); }
+        canvas { width: 100% !important; height: 100% !important; }
+
+    </style>
+</head>
+<body>
+
+    <div class="dashboard-container">
+        <header>
+            <h1>HMI / SCADA - Simulink Model Figure 3a & 3b</h1>
+            <div style="font-family: 'Rajdhani'; color: var(--accent-yellow); font-size: 18px; font-weight: bold;">G(s) = 1 / (1012.6s + 1)</div>
+        </header>
+
+        <main class="panel diagram-panel">
+            <div class="hmi-tag" style="top: 60px; left: 100px;">Q + q_in</div>
+            <div class="hmi-tag" style="top: 310px; left: 560px;">Q + q_out</div>
+            
+            <div class="pipe pipe-in-h"></div>
+            <div class="pipe pipe-in-v"></div>
+            <div class="pipe pipe-out"></div>
+
+            <svg style="position:absolute; top:87px; left:230px; z-index:25;" width="50" height="50" viewBox="0 0 50 50">
+                <polygon points="10,15 40,35 40,15 10,35" fill="#334155" stroke="#94a3b8" stroke-width="2"/>
+                <circle cx="25" cy="8" r="8" fill="#10b981" id="valveLed1"/>
+            </svg>
+            <svg style="position:absolute; top:337px; left:560px; z-index:25;" width="50" height="50" viewBox="0 0 50 50">
+                <polygon points="10,15 40,35 40,15 10,35" fill="#334155" stroke="#94a3b8" stroke-width="2"/>
+                <circle cx="25" cy="8" r="8" fill="#ef4444"/>
+            </svg>
+
+            <div class="stream stream-in" id="streamIn"></div>
+
+            <div class="tank">
+                <div class="water" id="waterLevel"></div>
+            </div>
+
+            <div class="stream stream-out" id="streamOut"></div>
+        </main>
+
+        <aside class="control-panel">
+            <div class="metric-card">
+                <span class="metric-title">Process Variable (Level)</span>
+                <span class="metric-value" id="dispPV" style="color: var(--accent-yellow);">0.0 %</span>
+            </div>
+
+            <div class="panel">
+                <div style="font-size: 12px; color: var(--accent-red); margin-bottom: 10px; font-weight: bold;">[Sesuai Fig 3a Jurnal]</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label>Set Point (Step Input)</label>
+                        <input type="number" id="inpSP" value="100" step="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Kp (Gain)</label>
+                        <input type="number" id="inpKp" value="120">
+                    </div>
+                    <div class="form-group">
+                        <label>Ki (Gain)</label>
+                        <input type="number" id="inpKi" value="30">
+                    </div>
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label>Kd (Gain)</label>
+                        <input type="number" id="inpKd" value="10">
+                    </div>
+                </div>
+                
+                <div class="btn-group">
+                    <button id="btnPlay" class="btn-play">Run Simulink</button>
+                    <button id="btnReset" class="btn-reset">Reset</button>
+                </div>
+            </div>
+        </aside>
+
+        <section class="chart-panel">
+            <canvas id="mainChart"></canvas>
+        </section>
+
+    </div>
+
+    <script>
+        // --- MODEL FISIKA (Fig 3a Jurnal) ---
+        const TAU = 1012.6; 
+        const DT = 0.1;     // Resolusi waktu presisi tinggi
+        const SPEEDUP = 10; // Kecepatan render
+
+        let currentPV = 0.0; 
+        let integral = 0.0;
+        let prevError = 0.0;
+        let time = 0.0;
+        let isRunning = false;
+        let animationId;
+
+        // --- DOM Elements ---
+        const uiWater = document.getElementById('waterLevel');
+        const uiStreamIn = document.getElementById('streamIn');
+        const uiStreamOut = document.getElementById('streamOut');
+        const dispPV = document.getElementById('dispPV');
+
+        // --- CHART.JS (Style MATLAB Scope Jurnal) ---
+        Chart.defaults.color = '#fff';
+        const ctx = document.getElementById('mainChart').getContext('2d');
+
+        const myChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Level Cairan (Overshoot ~1.4)',
+                        data: [],
+                        borderColor: '#f1c40f', // Kuning terang seperti MATLAB Scope
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Set Point (1.0 / 100%)',
+                        data: [],
+                        borderColor: 'rgba(255, 255, 255, 0.5)',
+                        borderWidth: 1.5,
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, animation: false,
+                scales: {
+                    x: { 
+                        grid: { color: 'rgba(255,255,255,0.2)', borderDash: [2, 4] }, 
+                        title: { display: true, text: 'Time (offset: 0)', color: '#fff' } 
+                    },
+                    y: { 
+                        min: 0, max: 160, // Skala dibuat sampai 160% (1.6) untuk mengakomodasi overshoot 140%
+                        grid: { color: 'rgba(255,255,255,0.2)', borderDash: [2, 4] },
+                        title: { display: true, text: 'Amplitude', color: '#fff' }
+                    }
+                }
+            }
+        });
+
+        // --- SIMULATION ENGINE ---
+        function loop() {
+            if (!isRunning) return;
+
+            let SP = parseFloat(document.getElementById('inpSP').value);
+            let Kp = parseFloat(document.getElementById('inpKp').value);
+            let Ki = parseFloat(document.getElementById('inpKi').value);
+            let Kd = parseFloat(document.getElementById('inpKd').value);
+
+            let u = 0;
+
+            for(let i=0; i<SPEEDUP; i++) {
+                // Kalkulasi matematis murni tanpa limitasi fisik (Linear System)
+                let error = SP - currentPV;
+                
+                integral += error * DT;
+                let derivative = (error - prevError) / DT;
+                
+                // Sinyal U tidak di-clamp (dibatasi) agar grafiknya persis jurnal
+                u = (Kp * error) + (Ki * integral) + (Kd * derivative);
+
+                let dy = (u - currentPV) / TAU;
+                currentPV += dy * DT;
+
+                prevError = error;
+                time += DT;
+
+                // Simpan data untuk grafik
+                if (Math.round(time * 10) % (SPEEDUP * 2) === 0) {
+                    myChart.data.labels.push(time.toFixed(1));
+                    myChart.data.datasets[0].data.push(currentPV);
+                    myChart.data.datasets[1].data.push(SP);
+                    
+                    // Grafik berjalan hingga ~80 detik seperti Gambar 3b
+                    if (myChart.data.labels.length > 300) {
+                        myChart.data.labels.shift();
+                        myChart.data.datasets[0].data.shift();
+                        myChart.data.datasets[1].data.shift();
+                    }
+                }
+            }
+
+            // Update UI
+            dispPV.innerText = `${currentPV.toFixed(1)} %`;
+
+            // Tangki akan "luber" secara visual jika level > 100%, ini menunjukkan overshoot
+            let visualLevel = Math.min(110, Math.max(0, currentPV));
+            uiWater.style.height = `${visualLevel}%`;
+            
+            // Animasi visual katup
+            if (u > 0) {
+                uiStreamIn.style.opacity = 1;
+                uiStreamIn.style.height = (60 + (100 - visualLevel) * 2.2) + 'px';
+            } else {
+                uiStreamIn.style.opacity = 0;
+            }
+
+            if (currentPV > 0) {
+                uiStreamOut.style.opacity = 1;
+                uiStreamOut.style.width = (20 + (Math.min(100, currentPV) * 0.8)) + 'px';
+            } else {
+                uiStreamOut.style.opacity = 0;
+            }
+
+            myChart.update();
+            animationId = requestAnimationFrame(loop);
+        }
+
+        // --- BUTTONS ---
+        const btnPlay = document.getElementById('btnPlay');
+        btnPlay.addEventListener('click', () => {
+            isRunning = !isRunning;
+            if (isRunning) {
+                btnPlay.innerText = "Pause";
+                btnPlay.classList.add('running');
+                prevError = parseFloat(document.getElementById('inpSP').value) - currentPV;
+                animationId = requestAnimationFrame(loop);
+            } else {
+                btnPlay.innerText = "Run Simulink";
+                btnPlay.classList.remove('running');
+                cancelAnimationFrame(animationId);
+            }
+        });
+
+        document.getElementById('btnReset').addEventListener('click', () => {
+            isRunning = false;
+            btnPlay.innerText = "Run Simulink";
+            btnPlay.classList.remove('running');
+            cancelAnimationFrame(animationId);
+            
+            currentPV = 0; integral = 0; time = 0;
+            uiWater.style.height = '0%';
+            uiStreamIn.style.opacity = 0;
+            uiStreamOut.style.opacity = 0;
+            dispPV.innerText = "0.0 %";
+
+            myChart.data.labels = [];
+            myChart.data.datasets[0].data = [];
+            myChart.data.datasets[1].data = [];
+            myChart.update();
+        });
+    </script>
+</body>
+</html>
